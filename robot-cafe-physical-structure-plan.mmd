@@ -1,0 +1,27 @@
+flowchart LR
+  subgraph BACK["제조부 영역 (높은 외벽 뒤)"]
+    CUP["컵 디스펜서"]
+    COF["커피 머신"]
+    POW["파우더 머신"]
+    ETC["기타 제조 스테이션"]
+  end
+
+  subgraph ROBOT["로봇 이동/작업부"]
+    RAIL["긴 좌우 레일 (X축)"]
+    PLATE["레일 위 플레이트(Carriage)"]
+    ARM["Fairino FR3"]
+    GRIP["그리퍼"]
+    WRGB["무선 RGB 카메라<br/>(그리퍼 장착)"]
+
+    RAIL <--> PLATE
+    PLATE --> ARM --> GRIP
+    GRIP --- WRGB
+  end
+
+  GAP["전달 Gap"]
+  PICK["긴 픽업존 테이블<br/>(검정 철제, Ultra-wide 내장 디스플레이)"]
+  CUSTOMER["고객 대기/수령 공간"]
+
+  BACK --> GAP --> PICK --> CUSTOMER
+  ARM -->|"제조부 각 스테이션 접근"| BACK
+  ARM -->|"픽업존 전 구간 서빙"| PICK

@@ -1,0 +1,9 @@
+flowchart TB
+  WALL["제조부 외벽 (픽업존보다 높음)"]
+  D455["Intel RealSense D455f<br/>외벽 최상단 중앙"]
+  PICK2["픽업존 테이블/디스플레이"]
+  WRGB2["무선 RGB 카메라 (그리퍼 탑재)"]
+
+  WALL --> D455
+  D455 -. 약 35도 하향 관측 .-> PICK2
+  WRGB2 -. 근접 시야(컵/그립/배치 확인) .-> PICK2
