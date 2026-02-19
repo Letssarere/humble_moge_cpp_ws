@@ -140,14 +140,21 @@ TrtCommon::~TrtCommon() {}
 
 void TrtCommon::setup()
 {
+  is_initialized_ = false;
+
   if (!fs::exists(model_file_path_)) {
-    is_initialized_ = false;
+    const std::string message = "Model file does not exist: " + model_file_path_.string();
+    logger_.log(nvinfer1::ILogger::Severity::kERROR, message.c_str());
     return;
   }
-  std::string engine_path = model_file_path_;
+  std::string engine_path = model_file_path_.string();
   if (model_file_path_.extension() == ".engine") {
     std::cout << "Load ... " << model_file_path_ << std::endl;
-    loadEngine(model_file_path_);
+    if (!loadEngine(model_file_path_.string())) {
+      const std::string message = "Failed to load engine file: " + model_file_path_.string();
+      logger_.log(nvinfer1::ILogger::Severity::kERROR, message.c_str());
+      return;
+    }
   } else if (model_file_path_.extension() == ".onnx") {
     fs::path cache_engine_path;
     std::string ext;
@@ -191,16 +198,43 @@ void TrtCommon::setup()
 
     if (fs::exists(cache_engine_path)) {
       std::cout << "Loading... " << cache_engine_path << std::endl;
-      loadEngine(cache_engine_path);
+      if (!loadEngine(cache_engine_path.string())) {
+        const std::string warning_message =
+          "Failed to load cached engine, rebuilding from ONNX: " + cache_engine_path.string();
+        logger_.log(nvinfer1::ILogger::Severity::kWARNING, warning_message.c_str());
+        logger_.log(nvinfer1::ILogger::Severity::kINFO, "Start build engine");
+        const bool build_ok = buildEngineFromOnnx(model_file_path_.string(), cache_engine_path.string());
+        logger_.log(nvinfer1::ILogger::Severity::kINFO, "End build engine");
+        if (!build_ok) {
+          const std::string error_message =
+            "Failed to build engine from ONNX: " + model_file_path_.string();
+          logger_.log(nvinfer1::ILogger::Severity::kERROR, error_message.c_str());
+          return;
+        }
+      }
     } else {
       std::cout << "Building... " << cache_engine_path << std::endl;
       logger_.log(nvinfer1::ILogger::Severity::kINFO, "Start build engine");
-      buildEngineFromOnnx(model_file_path_, cache_engine_path);
+      const bool build_ok = buildEngineFromOnnx(model_file_path_.string(), cache_engine_path.string());
       logger_.log(nvinfer1::ILogger::Severity::kINFO, "End build engine");
+      if (!build_ok) {
+        const std::string error_message =
+          "Failed to build engine from ONNX: " + model_file_path_.string();
+        logger_.log(nvinfer1::ILogger::Severity::kERROR, error_message.c_str());
+        return;
+      }
     }
-    engine_path = cache_engine_path;
+    engine_path = cache_engine_path.string();
   } else {
-    is_initialized_ = false;
+    const std::string message =
+      "Unsupported model extension for: " + model_file_path_.string() + " (expected .onnx or .engine)";
+    logger_.log(nvinfer1::ILogger::Severity::kERROR, message.c_str());
+    return;
+  }
+
+  if (!engine_) {
+    const std::string message = "TensorRT engine is null after setup: " + engine_path;
+    logger_.log(nvinfer1::ILogger::Severity::kERROR, message.c_str());
     return;
   }
 
@@ -230,12 +264,36 @@ void TrtCommon::setup()
 
 bool TrtCommon::loadEngine(const std::string & engine_file_path)
 {
-  std::ifstream engine_file(engine_file_path);
-  std::stringstream engine_buffer;
-  engine_buffer << engine_file.rdbuf();
-  std::string engine_str = engine_buffer.str();
+  std::ifstream engine_file(engine_file_path, std::ios::binary | std::ios::ate);
+  if (!engine_file.is_open()) {
+    const std::string message = "Failed to open engine file: " + engine_file_path;
+    logger_.log(nvinfer1::ILogger::Severity::kERROR, message.c_str());
+    return false;
+  }
+
+  const std::streamsize engine_size = engine_file.tellg();
+  if (engine_size <= 0) {
+    const std::string message = "Engine file is empty or unreadable: " + engine_file_path;
+    logger_.log(nvinfer1::ILogger::Severity::kERROR, message.c_str());
+    return false;
+  }
+
+  engine_file.seekg(0, std::ios::beg);
+  std::string engine_str(static_cast<size_t>(engine_size), '\0');
+  if (!engine_file.read(engine_str.data(), engine_size)) {
+    const std::string message = "Failed to read engine file: " + engine_file_path;
+    logger_.log(nvinfer1::ILogger::Severity::kERROR, message.c_str());
+    return false;
+  }
+
   engine_ = TrtUniquePtr<nvinfer1::ICudaEngine>(runtime_->deserializeCudaEngine(
     reinterpret_cast<const void *>(engine_str.data()), engine_str.size()));
+  if (!engine_) {
+    const std::string message = "Failed to deserialize engine: " + engine_file_path;
+    logger_.log(nvinfer1::ILogger::Severity::kERROR, message.c_str());
+    return false;
+  }
+
   return true;
 }
 

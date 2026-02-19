@@ -1,7 +1,7 @@
 moge_trt:
   ros__parameters:
     # Model configuration
-    onnx_path: "/docker-ros/ws/install/moge_trt/share/moge_trt/models/moge-2_vits_normal_291x518_dynamo_sim.onnx"
+    onnx_path: "models/moge-2_vits_normal_291x518_dynamo_sim.onnx"
     precision: "fp16"  # fp16 or fp32
     
     # Debug configuration

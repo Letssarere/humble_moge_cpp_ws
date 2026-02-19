@@ -29,6 +29,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <sensor_msgs/image_encodings.hpp>
 
 namespace
 {
@@ -65,7 +66,7 @@ MogeTrtNode::MogeTrtNode(const rclcpp::NodeOptions & node_options)
     this->add_on_set_parameters_callback(std::bind(&MogeTrtNode::onSetParam, this, _1));
   
   node_param_.onnx_path = declare_parameter<std::string>(
-    "onnx_path", "models/moge-2_vits_normal_291x518.onnx");
+    "onnx_path", "models/moge-2_vits_normal_291x518_dynamo_sim.onnx");
   node_param_.precision = declare_parameter<std::string>("precision", "fp16");
   
   // Debug parameters
@@ -85,23 +86,23 @@ MogeTrtNode::MogeTrtNode(const rclcpp::NodeOptions & node_options)
 
   RCLCPP_INFO(get_logger(), "Using ONNX model: %s", node_param_.onnx_path.c_str());
 
-  // Synchronized subscribers for compressed image and camera_info
-  sub_compressed_image_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::CompressedImage>>(
+  // Synchronized subscribers for raw image and camera_info
+  sub_image_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::Image>>(
     this, "~/input/image");
   sub_camera_info_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::CameraInfo>>(
     this, "~/input/camera_info");
   
   // Use approximate time synchronizer with 100ms tolerance
   sync_ = std::make_shared<message_filters::Synchronizer<ApproxSyncPolicy>>(
-    ApproxSyncPolicy(10), *sub_compressed_image_, *sub_camera_info_);
-  sync_->registerCallback(std::bind(&MogeTrtNode::onCompressedImageCameraInfo, this, _1, _2));
+    ApproxSyncPolicy(10), *sub_image_, *sub_camera_info_);
+  sync_->registerCallback(std::bind(&MogeTrtNode::onImageCameraInfo, this, _1, _2));
   
   RCLCPP_INFO(get_logger(), "Using ApproximateTime synchronizer with queue size 10");
 
   // Debug subscribers to check if individual topics are arriving
-  debug_image_sub_ = this->create_subscription<sensor_msgs::msg::CompressedImage>(
+  debug_image_sub_ = this->create_subscription<sensor_msgs::msg::Image>(
     "~/input/image", rclcpp::SensorDataQoS(),
-    std::bind(&MogeTrtNode::onCompressedImageDebug, this, std::placeholders::_1));
+    std::bind(&MogeTrtNode::onImageDebug, this, std::placeholders::_1));
   debug_camera_info_sub_ = this->create_subscription<sensor_msgs::msg::CameraInfo>(
     "~/input/camera_info", rclcpp::SensorDataQoS(),
     std::bind(&MogeTrtNode::onCameraInfoDebug, this, std::placeholders::_1));
@@ -143,8 +144,8 @@ MogeTrtNode::MogeTrtNode(const rclcpp::NodeOptions & node_options)
   RCLCPP_INFO(get_logger(), "Finish initialize TensorRT MoGe model");
 }
 
-void MogeTrtNode::onCompressedImageCameraInfo(
-  const sensor_msgs::msg::CompressedImage::ConstSharedPtr & image_msg,
+void MogeTrtNode::onImageCameraInfo(
+  const sensor_msgs::msg::Image::ConstSharedPtr & image_msg,
   const sensor_msgs::msg::CameraInfo::ConstSharedPtr & camera_info_msg)
 {
 
@@ -328,13 +329,14 @@ int MogeTrtNode::getColorMapType(const std::string& colormap_name)
   }
 }
 
-void MogeTrtNode::onCompressedImageDebug(const sensor_msgs::msg::CompressedImage::ConstSharedPtr & msg)
+void MogeTrtNode::onImageDebug(const sensor_msgs::msg::Image::ConstSharedPtr & msg)
 {
   static int image_count = 0;
   image_count++;
   RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000, 
-    "[DEBUG] Received compressed image #%d, size: %zu bytes, format: %s, timestamp: %d.%09d", 
-    image_count, msg->data.size(), msg->format.c_str(), msg->header.stamp.sec, msg->header.stamp.nanosec);
+    "[DEBUG] Received image #%d, resolution: %ux%u, encoding: %s, step: %u, size: %zu bytes, timestamp: %d.%09d",
+    image_count, msg->width, msg->height, msg->encoding.c_str(), msg->step, msg->data.size(),
+    msg->header.stamp.sec, msg->header.stamp.nanosec);
 }
 
 void MogeTrtNode::onCameraInfoDebug(const sensor_msgs::msg::CameraInfo::ConstSharedPtr & msg)

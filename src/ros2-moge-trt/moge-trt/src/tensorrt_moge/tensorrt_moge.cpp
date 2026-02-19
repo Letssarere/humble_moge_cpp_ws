@@ -149,6 +149,9 @@ TensorRTMoge::TensorRTMoge(
   trt_common_ = std::make_unique<tensorrt_common::TrtCommon>(
     model_path, precision, nullptr, batch_config, max_workspace_size, build_config);
   trt_common_->setup();
+  if (!trt_common_->isInitialized()) {
+    throw std::runtime_error("Failed to initialize TensorRT engine for model: " + model_path);
+  }
 
   // Get output tensor information
   const auto& output_dims = trt_common_->getBindingDimensions(1); // points output
