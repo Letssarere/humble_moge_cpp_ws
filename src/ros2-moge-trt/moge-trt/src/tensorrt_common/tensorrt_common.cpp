@@ -25,6 +25,7 @@
 #include <NvInferPlugin.h>
 #include <dlfcn.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -41,6 +42,9 @@ bool contain(const std::string & s, const T & v)
 {
   return s.find(v) != std::string::npos;
 }
+
+constexpr uint32_t kExplicitBatchFlag =
+  1U << static_cast<uint32_t>(nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
 }  // anonymous namespace
 
 namespace tensorrt_common
@@ -56,7 +60,7 @@ nvinfer1::Dims get_input_dims(const std::string & onnx_file_path)
   }
 
   auto network =
-    TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0U));
+    TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(kExplicitBatchFlag));
   if (!network) {
     logger_.log(nvinfer1::ILogger::Severity::kERROR, "Fail to create network");
   }
@@ -306,7 +310,7 @@ void TrtCommon::printNetworkInfo(const std::string & onnx_file_path)
   }
 
   auto network =
-    TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0U));
+    TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(kExplicitBatchFlag));
   if (!network) {
     logger_.log(nvinfer1::ILogger::Severity::kERROR, "Fail to create network");
     return;
@@ -408,7 +412,7 @@ bool TrtCommon::buildEngineFromOnnx(
   }
 
   auto network =
-    TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(0U));
+    TrtUniquePtr<nvinfer1::INetworkDefinition>(builder->createNetworkV2(kExplicitBatchFlag));
   if (!network) {
     logger_.log(nvinfer1::ILogger::Severity::kERROR, "Fail to create network");
     return false;
